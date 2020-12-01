@@ -5,12 +5,13 @@ log.info(`Starting sf-streaming-sns-bridge v${process.env.npm_package_version}`)
 
 const http = require('http');
 const Bridge = require('./bridge').Bridge;
+const Config = require('./config').Config;
 
 const PORT = process.env.BRIDGE_PORT || process.env.PORT || 8080;
 
 let serverStatus = 'DOWN';
 
-const bridge = new Bridge();
+const bridge = new Bridge(new Config());
 
 // Exposing REST API
 http.createServer(function (req, res) {
