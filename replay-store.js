@@ -74,4 +74,4 @@ class ReplayStore {
     }
 }
 
-module.exports = { ReplayStore }
+module.exports = { ReplayStore };
