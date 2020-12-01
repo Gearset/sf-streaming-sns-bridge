@@ -11,13 +11,16 @@ class Worker {
     /**
      * 
      * @param {*} log
+     * @param {ReplayStore} replayStore
      * @param {string} workerId
      * @param {*} sfConnOptions 
      * @param {*} mappingConfig     {channelName, snsTopicArn}
      * @param {*} options  {replayIdStoreTableName, replayIdStoreKeyName, replayIdStoreDelay, initialReplayId}
      */
-    constructor(log, workerId, sfConnOptions, mappingConfig, options) {
+    constructor(log, replayStore, workerId, sfConnOptions, mappingConfig, options) {
         this.log = log;
+
+        this.replayIdManager = replayStore;
 
         this.workerId = workerId;
 
@@ -27,19 +30,13 @@ class Worker {
         this.sfConnOptions = sfConnOptions;
 
         this.channelName = mappingConfig.channelName;
-        this.snsTopicArn = mappingConfig.snsTopicArn;
-
-        this.replayIdStoreTableName = options && options.replayIdStoreTableName;
-        this.replayIdStoreKeyName = (options && options.replayIdStoreKeyName) || 'channel';
-        this.replayIdStoreDelay = (options && options.replayIdStoreDelay) || 2000;
-        this.initialReplayId = (options && options.initialReplayId) || -1;
+        this.snsTopicArn = mappingConfig.snsTopicArn;        
+        
         this.debug = options && options.debug;
 
         this.status = STATUS_INITIALIZED;
         this.replayId = null;
-        this.lastReplayIdStoredTime = 0;
-        this.lastReplayIdStored = null;
-
+        
         this.logMessages = new Array(20);
         this.recentMessages = new Array(20);
 
@@ -67,67 +64,6 @@ class Worker {
         this.recentMessages.pop();
     }
 
-    fetchReplayId() {
-        if (this.replayIdStoreTableName) {
-            return this.ddb.get({
-                TableName: this.replayIdStoreTableName,
-                Key: {
-                    [this.replayIdStoreKeyName]: this.workerId,
-                },
-            }).promise()
-            .then(result => {
-                if (result.Item && result.Item.replayId) {
-                    return result.Item.replayId;
-                } else {
-                    this.log(`There is no previously stored replayId, will use ${this.initialReplayId}`);
-                    return this.initialReplayId;
-                }
-            })
-            .catch(e => {
-                this.log(`Couldn't fetch previously stored replayId, will use ${this.initialReplayId}: ${e}`);
-                return this.initialReplayId;
-            });
-        }
-        return Promise.resolve(this.initialReplayId);
-    }
-
-    /**
-     * Store replay id to DynamoDB if configured, or no-op otherwise.
-     * @param {boolean} flush if true the actual Promise would be returned, otherwise Promise.resolve() would be returned.
-     * @returns Promise for the save operation or no-op
-     */
-    storeReplayId(flush) {
-        if (this.replayIdStoreTableName) {
-            const now = new Date().getTime();
-            const moreToWait = this.replayIdStoreDelay - (now - this.lastReplayIdStoredTime);
-            if (flush || moreToWait <= 0) {
-                // save to DynamoDb
-                const newReplayId = this.replayId;
-                const p = this.ddb.update({
-                    TableName: this.replayIdStoreTableName,
-                    Key: {
-                        [this.replayIdStoreKeyName]: this.workerId,
-                    },
-                    UpdateExpression: "set replayId = :newReplayId",
-                    ConditionExpression: `attribute_not_exists(${this.replayIdStoreKeyName}) or attribute_not_exists(replayId) or replayId < :newReplayId`,
-                    ExpressionAttributeValues:{
-                        ":newReplayId": newReplayId,
-                    },
-                }).promise()
-                .then(result => {
-                    this.lastReplayIdStored = newReplayId;
-                })
-                .catch(e => {
-                    this.log(`Didn't store replayId ${newReplayId}: ${e}`);
-                });
-                return flush? p : Promise.resolve();
-            } else {
-                setTimeout(this.storeReplayId.bind(this), moreToWait + 100);
-            }
-        }
-        return Promise.resolve();
-    }
-
     publishToSNS(payload) {
         return this.sns.publish({
             Message: payload,
@@ -153,7 +89,7 @@ class Worker {
                 }
                 if (this.replayId === previousReplayId || this.replayId < newReplayId) {
                     this.replayId = newReplayId;
-                    this.storeReplayId();
+                    this.replaydIdManager.storeReplayId();
                 } else {
                     this.log.debug(`replayId not updated because: previous=${previousReplayId}, new=${newReplayId}, current=${this.replayId}`, {...logMeta});
                 }
@@ -176,7 +112,7 @@ class Worker {
         this.log.info(`Starting: ${this.workerId}`);
         this.status = STATUS_STARTING;
         this.log('Fetching initial replayId');
-        return this.fetchReplayId().then(replayId => {
+        return this.replayIdManager.fetchReplayId().then(replayId => {
             this.replayId = replayId;
             const replayExt = new jsforce.StreamingExtension.Replay(this.channelName, this.replayId);
             const authFailureExt = new jsforce.StreamingExtension.AuthFailure(() => {
@@ -223,7 +159,7 @@ class Worker {
         this.log.info(`Stopped: ${this.workerId}`);
         this.streamingClient = null;
         this.connection = null;
-        return this.storeReplayId(true);
+        return this.replayIdManager.storeReplayId(true);
     }
 }
 
