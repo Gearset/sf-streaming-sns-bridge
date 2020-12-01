@@ -1,6 +1,6 @@
 const log = require('lambda-log');
 const AWS = require('aws-sdk');
-const Worker = require('./agnostic-worker').Worker;
+const Listener = require('./listener').Listener;
 const Publisher = require('./publisher').Publisher;
 const ReplayStore = require('./replay-store').ReplayStore;
 
@@ -77,7 +77,7 @@ class Bridge {
                     envDetails.channels.forEach(mappingConfig => {
                         const publisher = new Publisher(mappingConfig.snsTopicArn);
                         const channelKey = `${envName}//${mappingConfig.channelName}`;
-                        newWorkers[channelKey] = new Worker(log, replayStore, publisher, channelKey, sfConnOptions, mappingConfig.channelName, options);
+                        newWorkers[channelKey] = new Listener(log, replayStore, publisher, channelKey, sfConnOptions, mappingConfig.channelName, options);
                     });
                 }
                 log.info(`Loaded configuration`, {channels: Object.keys(newWorkers)});

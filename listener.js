@@ -6,7 +6,7 @@ const STATUS_STARTED = "Started";
 const STATUS_STOPPING = "Stopping";
 const STATUS_STOPPED = "Stopped";
 
-class Worker {
+class Listener {
     /**
      * 
      * @param {*} log
@@ -153,4 +153,4 @@ class Worker {
     }
 }
 
-module.exports = { Worker };
+module.exports = { Listener };
