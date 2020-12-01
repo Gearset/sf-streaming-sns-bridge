@@ -73,3 +73,5 @@ class ReplayStore {
         return Promise.resolve(this.initialReplayId);
     }
 }
+
+module.exports = { ReplayStore }
