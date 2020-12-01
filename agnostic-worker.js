@@ -1,4 +1,3 @@
-const AWS = require('aws-sdk');
 const jsforce = require('jsforce');
 
 const STATUS_INITIALIZED = "Initialized";
@@ -12,25 +11,24 @@ class Worker {
      * 
      * @param {*} log
      * @param {ReplayStore} replayStore
+     * @param {Publisher} publisher
      * @param {string} workerId
      * @param {*} sfConnOptions 
-     * @param {*} mappingConfig     {channelName, snsTopicArn}
+     * @param {string} channelName
      * @param {*} options  {replayIdStoreTableName, replayIdStoreKeyName, replayIdStoreDelay, initialReplayId}
      */
-    constructor(log, replayStore, workerId, sfConnOptions, mappingConfig, options) {
+    constructor(log, replayStore, publisher, workerId, sfConnOptions, channelName, options) {
         this.log = log;
 
         this.replayIdManager = replayStore;
 
-        this.workerId = workerId;
+        this.publisher = publisher;
 
-        this.sns = new AWS.SNS();
-        
+        this.workerId = workerId;
 
         this.sfConnOptions = sfConnOptions;
 
-        this.channelName = mappingConfig.channelName;
-        this.snsTopicArn = mappingConfig.snsTopicArn;        
+        this.channelName = channelName;
         
         this.debug = options && options.debug;
 
@@ -64,14 +62,6 @@ class Worker {
         this.recentMessages.pop();
     }
 
-    publishToSNS(payload) {
-        return this.sns.publish({
-            Message: payload,
-            TopicArn: this.snsTopicArn,
-        }).promise()
-        .then(result => result.MessageId);
-    }
-
     subscribeCallback(data) {
         if (this.status !== STATUS_STOPPING && this.status != STATUS_STOPPED) {
             const newReplayId = data.event.replayId;
@@ -83,7 +73,7 @@ class Worker {
             this.logReceivedMessage(newReplayId);
             const payload = data.payload;
             const payloadJson = JSON.stringify(payload);
-            this.publishToSNS(payloadJson).then(() => {
+            this.publisher.publishToSNS(payloadJson).then(() => {
                 if(this.debug) {
                     this.log.debug(`[${this.workerId}] Published to SNS (replayId=${newReplayId})`, {...logMeta, payload});
                 }
