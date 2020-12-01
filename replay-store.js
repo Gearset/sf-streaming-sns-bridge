@@ -1,3 +1,5 @@
+const AWS = require('aws-sdk');
+
 class ReplayStore {
 
     /**
@@ -10,6 +12,8 @@ class ReplayStore {
         this.initialReplayId = (options && options.initialReplayId) || -1;
         this.lastReplayIdStoredTime = 0;
         this.lastReplayIdStored = null;
+
+        this.ddb = new AWS.DynamoDB.DocumentClient();
     }
 
     /**

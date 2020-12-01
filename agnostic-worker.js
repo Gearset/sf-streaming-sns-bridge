@@ -25,7 +25,7 @@ class Worker {
         this.workerId = workerId;
 
         this.sns = new AWS.SNS();
-        this.ddb = new AWS.DynamoDB.DocumentClient();
+        
 
         this.sfConnOptions = sfConnOptions;
 
